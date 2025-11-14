@@ -102,3 +102,63 @@ See `src/main.rs` for the full implementation.
 ### Root Cause
 
 The issue is in how Claude Code serializes nested object parameters when calling MCP tools. Instead of keeping nested objects as objects in the JSON-RPC call, it stringifies them, causing deserialization failures on the server side.
+
+### Output of List Tools (w/ JSONRPC Schema)
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "tools": [
+      {
+        "name": "echo",
+        "description": "Takes the input and combines it into a single output message",
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "definitions": {
+            "NestedItem": {
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          },
+          "properties": {
+            "message": {
+              "type": "string"
+            },
+            "nested_item": {
+              "$ref": "#/definitions/NestedItem"
+            }
+          },
+          "required": [
+            "message",
+            "nested_item"
+          ],
+          "title": "EchoInput",
+          "type": "object"
+        },
+        "outputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "properties": {
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "message"
+          ],
+          "title": "EchoOutput",
+          "type": "object"
+        }
+      }
+    ]
+  }
+}
+```
