@@ -57,6 +57,12 @@ pub struct World {
     message: String,
 }
 
+#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
+pub struct EchoOptional {
+    message: String,
+    optional_message: Option<String>,
+}
+
 #[derive(Clone)]
 pub struct McpService {
     tool_router: ToolRouter<Self>,
@@ -85,6 +91,18 @@ impl McpService {
             OneOf::Hello(hello) => format!("Hello Message: {}", hello.message),
             OneOf::World(world) => format!("World Message: {}", world.message),
         };
+        Ok(Json(EchoOutput { message }))
+    }
+
+    #[tool(description = "Echoes an optional value")]
+    pub async fn echo_optional(
+        &self,
+        params: Parameters<EchoOptional>,
+    ) -> Result<Json<EchoOutput>, McpError> {
+        let mut message = params.0.message.clone();
+        if let Some(optional) = params.0.optional_message {
+            message.push_str(&format!(" {}", optional));
+        }
         Ok(Json(EchoOutput { message }))
     }
 }
