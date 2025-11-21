@@ -36,6 +36,27 @@ pub struct EchoOutput {
     message: String,
 }
 
+#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
+pub struct EchoOneOf {
+    one_of: OneOf,
+}
+
+#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
+pub enum OneOf {
+    Hello(Hello),
+    World(World),
+}
+
+#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
+pub struct Hello {
+    message: String,
+}
+
+#[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
+pub struct World {
+    message: String,
+}
+
 #[derive(Clone)]
 pub struct McpService {
     tool_router: ToolRouter<Self>,
@@ -52,6 +73,18 @@ impl McpService {
     #[tool(description = "Takes the input and combines it into a single output message")]
     pub async fn echo(&self, params: Parameters<EchoInput>) -> Result<Json<EchoOutput>, McpError> {
         let message = format!("{} {}", params.0.message, params.0.nested_item.message);
+        Ok(Json(EchoOutput { message }))
+    }
+
+    #[tool(description = "Echoes a one-of value")]
+    pub async fn echo_one_of(
+        &self,
+        params: Parameters<EchoOneOf>,
+    ) -> Result<Json<EchoOutput>, McpError> {
+        let message = match params.0.one_of {
+            OneOf::Hello(hello) => format!("Hello Message: {}", hello.message),
+            OneOf::World(world) => format!("World Message: {}", world.message),
+        };
         Ok(Json(EchoOutput { message }))
     }
 }
