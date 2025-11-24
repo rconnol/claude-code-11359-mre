@@ -1,19 +1,14 @@
 use axum::Router;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::InitializeRequestParam;
-use rmcp::model::InitializeResult;
-use rmcp::model::ServerCapabilities;
-use rmcp::model::ServerInfo;
-use rmcp::model::ToolsCapability;
-use rmcp::service::RequestContext;
+use rmcp::model::{ServerCapabilities, ServerInfo};
 use rmcp::tool;
+use rmcp::tool_handler;
 use rmcp::tool_router;
-use rmcp::transport::sse_server::SseServerConfig;
-use rmcp::transport::SseServer;
+use rmcp::transport::streamable_http_server::session::never::NeverSessionManager;
+use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
 use rmcp::ErrorData as McpError;
 use rmcp::Json;
-use rmcp::RoleServer;
 use rmcp::ServerHandler;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -107,47 +102,11 @@ impl McpService {
     }
 }
 
+#[tool_handler]
 impl ServerHandler for McpService {
-    async fn initialize(
-        &self,
-        request: InitializeRequestParam,
-        context: RequestContext<RoleServer>,
-    ) -> Result<InitializeResult, McpError> {
-        // Set peer info first (standard behavior)
-        if context.peer.peer_info().is_none() {
-            context.peer.set_peer_info(request);
-        }
-
-        // Create capabilities that properly advertise our tools
-        let capabilities = ServerCapabilities {
-            tools: Some(ToolsCapability {
-                list_changed: Some(true),
-            }),
-            prompts: None,
-            resources: None,
-            logging: None,
-            experimental: None,
-            completions: None,
-        };
-
-        let server_info = self.get_info();
-        let implementation = rmcp::model::Implementation {
-            name: "echo".to_string(),
-            title: None,
-            version: "0.1.0".to_string(),
-            icons: None,
-            website_url: None,
-        };
-        Ok(InitializeResult {
-            protocol_version: Default::default(),
-            capabilities,
-            server_info: implementation,
-            instructions: server_info.instructions.clone(),
-        })
-    }
-
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
+            capabilities: ServerCapabilities::builder().enable_tools().build(),
             instructions: Some("A tool to echo messages".to_string()),
             ..Default::default()
         }
@@ -156,23 +115,19 @@ impl ServerHandler for McpService {
 
 #[tokio::main]
 async fn main() {
-    let (sse, mcp_router) = SseServer::new(SseServerConfig {
-        bind: "127.0.0.1:0".parse().unwrap(),
-        sse_path: "/sse".to_string(),
-        post_path: "/message".to_string(),
-        ct: tokio_util::sync::CancellationToken::new(),
-        sse_keep_alive: None,
-    });
+    let config = StreamableHttpServerConfig {
+        stateful_mode: false,
+        ..Default::default()
+    };
+    let service = StreamableHttpService::new(
+        || Ok(McpService::new()),
+        NeverSessionManager {}.into(),
+        config,
+    );
+
+    let app = Router::new().nest_service("/mcp", service);
 
     let address = "127.0.0.1:4000";
-    let _ct = sse.with_service_directly(move || {
-        use rmcp::handler::server::router::Router as McpRouter;
-        let service = McpService::new();
-        McpRouter::new(service.clone()).with_tools(service.tool_router)
-    });
-
-    let app = Router::new().nest("/mcp", mcp_router);
-
     let listener = TcpListener::bind(address).await.unwrap();
     println!("Server Listening on: http://{}", address);
 
